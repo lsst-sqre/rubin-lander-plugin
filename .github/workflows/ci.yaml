@@ -20,23 +20,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Read .nvmrc
-        id: node_version
-        run: echo ::set-output name=NODE_VERSION::$(cat .nvmrc)
-
-      - name: Set up node
-        uses: actions/setup-node@v1
-        with:
-          node-version: ${{ steps.node_version.outputs.NODE_VERSION }}
-
       - name: Python install
         run: |
           python -m pip install --upgrade pip
           pip install .[dev]
           pip install tox
-
-      - name: Build assets
-        run: gulp assets --env=deploy
 
       - name: Run tests
         run: tox -e py,lint,typing
@@ -56,15 +44,6 @@ jobs:
         uses: actions/setup-python@v1
         with:
           python-version: 3.8
-
-      - name: Read .nvmrc
-        id: node_version
-        run: echo ::set-output name=NODE_VERSION::$(cat .nvmrc)
-
-      - name: Set up node
-        uses: actions/setup-node@v1
-        with:
-          node-version: ${{ steps.node_version.outputs.NODE_VERSION }}
 
       - name: Python install
         run: |
