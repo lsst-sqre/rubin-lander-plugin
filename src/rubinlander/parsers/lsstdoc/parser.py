@@ -24,17 +24,22 @@ class LsstDocParser(Parser):
 
     def extract_metadata(self, tex_source: str) -> DocumentMetadata:
         """Plugin entrypoint for metadata extraction."""
+        full_text = FormattedString.from_latex(self.tex_source, fragment=False)
+
         metadata = DocumentMetadata(
             title=self._parse_title(tex_source),
-            authors=self._parse_author(tex_source),
+            authors=LsstDocParser._parse_author(tex_source),
             date_modified=self._parse_date(tex_source),
             identifier=self._parse_doc_ref(tex_source),
             abstract=self._parse_abstract(tex_source),
+            version=self.ci_metadata.git_ref,
+            repository_url=self.ci_metadata.github_repository,
+            ci_url=self.ci_metadata.build_url,
+            full_text=full_text,
         )
         return metadata
 
-    @staticmethod
-    def _parse_title(tex_source: str) -> str:
+    def _parse_title(self, tex_source: str) -> str:
         """Parse the title command from the lsstdoc."""
         command = LaTeXCommand(
             "title",
@@ -117,8 +122,7 @@ class LsstDocParser(Parser):
         )
         return Person(name=name)
 
-    @staticmethod
-    def _parse_date(tex_source: str) -> Optional[datetime.datetime]:
+    def _parse_date(self, tex_source: str) -> Optional[datetime.datetime]:
         r"""Parse the ``\date`` command as a datetime."""
         command = LaTeXCommand(
             "date",
@@ -132,9 +136,9 @@ class LsstDocParser(Parser):
         command_content = parsed[-1]["content"].strip()
 
         # Try to parse a date from the \date command
-        if command_content == r"\today":
-            return None
-        elif command_content is not None:
+        # if command_content == r"\today":
+        #     return None
+        if command_content is not None and command_content != r"\today":
             try:
                 doc_datetime = datetime.datetime.strptime(
                     command_content, "%Y-%m-%d"
@@ -145,18 +149,24 @@ class LsstDocParser(Parser):
                 doc_datetime = doc_datetime.replace(hour=12, tzinfo=project_tz)
                 # Normalize to UTC
                 doc_datetime = doc_datetime.astimezone(tz.UTC)
+                return doc_datetime
             except ValueError:
                 logger.warning(
                     "Could not parse a datetime from "
                     "lsstdoc date command: %r",
                     command_content,
                 )
+
+        # Fallback to parsing from Git
+        try:
+            doc_datetime = self.git_repository.compute_date_modified(
+                extensions=["tex", "bib", "pdf", "jpg", "png", "csv"]
+            )
             return doc_datetime
-        else:
+        except Exception:
             return None
 
-    @staticmethod
-    def _parse_doc_ref(tex_source: str) -> Optional[str]:
+    def _parse_doc_ref(self, tex_source: str) -> Optional[str]:
         """Parse the setDocRef command to get the document identifier."""
         command = LaTeXCommand(
             "setDocRef",
@@ -169,8 +179,7 @@ class LsstDocParser(Parser):
 
         return parsed[-1]["handle"]
 
-    @staticmethod
-    def _parse_abstract(tex_source: str) -> Optional[FormattedString]:
+    def _parse_abstract(self, tex_source: str) -> Optional[FormattedString]:
         """Parse the setDocAbstract command."""
         command = LaTeXCommand(
             "setDocAbstract",

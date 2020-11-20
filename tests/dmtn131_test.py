@@ -5,13 +5,25 @@ from __future__ import annotations
 
 import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from dateutil import tz
 
 from rubinlander.parsers.lsstdoc import LsstDocParser
 
+if TYPE_CHECKING:
+    from _pytest.monkeypatch import MonkeyPatch
 
-def test_dmtn131() -> None:
+
+def test_dmtn131(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/tickets/DM-26564")
+    monkeypatch.setenv("GITHUB_RUN_ID", "1234")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "lsst-dm/dmtn-131")
+    monkeypatch.setenv(
+        "GITHUB_SHA", "cecaac52e1dbbc7709a93f715c3c68b845a3f976"
+    )
+
     root_tex_path = (
         Path(__file__).parent / "data" / "dmtn-131" / "DMTN-131.tex"
     )
@@ -34,4 +46,7 @@ def test_dmtn131() -> None:
         "operating costs for LSST as well as discuss long term archiving. "
         "The goal would be to see if we can come to an agreement with a "
         "major cloud provider.</p>"
+    )
+    assert parser.metadata.ci_url == (
+        "https://github.com/lsst-dm/dmtn-131/actions/runs/1234"
     )
