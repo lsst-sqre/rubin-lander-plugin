@@ -50,3 +50,4 @@ def test_dmtn131(monkeypatch: MonkeyPatch) -> None:
     assert parser.metadata.ci_url == (
         "https://github.com/lsst-dm/dmtn-131/actions/runs/1234"
     )
+    assert parser.metadata.license_identifier == "CC-BY-4.0"

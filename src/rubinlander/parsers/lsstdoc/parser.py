@@ -4,6 +4,7 @@ import datetime
 from logging import getLogger
 from typing import List, Optional
 
+import requests
 from dateutil import tz
 from lander.ext.parser import DocumentMetadata, FormattedString, Parser, Person
 from lander.ext.parser.pandoc import convert_text
@@ -11,6 +12,7 @@ from lander.ext.parser.texutils.extract import (
     LaTeXCommand,
     LaTeXCommandElement,
 )
+from pydantic import BaseModel
 
 from rubinlander.parsers.lsstdoc.lsstmacros import LSSTDOC_MACROS
 
@@ -26,6 +28,12 @@ class LsstDocParser(Parser):
         """Plugin entrypoint for metadata extraction."""
         full_text = FormattedString.from_latex(self.tex_source, fragment=False)
 
+        if self.ci_metadata.github_slug:
+            _owner, _repo = self.ci_metadata.github_slug.split("/")
+            github_metadata = GitHubMetadata.create(_owner, _repo)
+        else:
+            github_metadata = GitHubMetadata()
+
         metadata = DocumentMetadata(
             title=self._parse_title(tex_source),
             authors=LsstDocParser._parse_author(tex_source),
@@ -35,6 +43,7 @@ class LsstDocParser(Parser):
             version=self.ci_metadata.git_ref,
             repository_url=self.ci_metadata.github_repository,
             ci_url=self.ci_metadata.build_url,
+            license_identifier=github_metadata.license_id,
             full_text=full_text,
         )
         return metadata
@@ -197,3 +206,44 @@ class LsstDocParser(Parser):
 
 def prep_lsstdoc_latex(content: str) -> str:
     return "\n".join((LSSTDOC_MACROS, content))
+
+
+class GitHubMetadata(BaseModel):
+    """Metadata about the GitHub repository obtained from the GitHub API."""
+
+    license_id: Optional[str]
+    """The SPDX licence identifier."""
+
+    @classmethod
+    def create(cls, owner: str, repo: str) -> GitHubMetadata:
+        """Create a GitHubMetadata resource by making a request to the GitHub
+        REST API.
+
+        Parameters
+        ----------
+        owner : `str`
+            The repository owner (organization or user).
+        repo : `str`
+            The repository name.
+
+        Returns
+        -------
+        metadata : `GitHubMetadata`
+            The initialized `GitHubMetadata` resource.
+        """
+        try:
+            r = requests.get(
+                f"https://api.github.com/repos/{owner}/{repo}",
+                headers={"Accept": "application/vnd.github.v3+json"},
+            )
+            r.raise_for_status()
+        except requests.HTTPError:
+            return cls()
+
+        data = r.json()
+        try:
+            license_id = data["license"]["spdx_id"]
+        except KeyError:
+            license_id = None
+
+        return cls(license_id=license_id)
